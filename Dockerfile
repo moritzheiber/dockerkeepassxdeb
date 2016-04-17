@@ -1,19 +1,35 @@
-FROM ubuntu:14.04.3
-MAINTAINER Peter Mescalchin <peter@magnetikonline.com>
+FROM ubuntu:15.10
+MAINTAINER Moritz Heiber <hello@heiber.im>
 
-RUN apt-get update && apt-get -y upgrade
-RUN apt-get -y install checkinstall cmake libgcrypt20-dev libqt5x11extras5-dev make qt4-default qtbase5-dev qttools5-dev qttools5-dev-tools zlib1g-dev
-RUN apt-get clean
+ENV BUILD_DIR /tmp
 
-ADD https://www.keepassx.org/releases/2.0.2/keepassx-2.0.2.tar.gz /root/build/
-WORKDIR /root/build
-RUN tar -xf keepassx-2.0.2.tar.gz
+ARG version
+ARG uid
 
-RUN mkdir -p /root/build/keepassx-2.0.2/build
-WORKDIR /root/build/keepassx-2.0.2/build
-RUN cmake .. && make
+RUN apt-get update && \
+  apt-get -y install checkinstall cmake libgcrypt20-dev libqt5x11extras5-dev make qt4-default qtbase5-dev qttools5-dev qttools5-dev-tools zlib1g-dev curl
 
-RUN echo "magnetikonline: KeePassX v2.0.2" > description-pak && \
-	checkinstall -Dy --install=no --nodoc --pkgname=keepassx --pkgversion=2.0.2 make -i install
+WORKDIR ${BUILD_DIR}
+RUN curl -L https://www.keepassx.org/releases/${version}/keepassx-${version}.tar.gz | tar xzf - --strip-components=1 && \
+  mkdir -p ${BUILD_DIR}/build
 
-CMD ["/bin/bash"]
+WORKDIR ${BUILD_DIR}/build
+RUN  cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr .. && \
+  make
+
+RUN echo "magnetikonline: KeePassX v${version}" > description-pak && \
+  checkinstall -Dy \
+  --install=no \
+  --strip \
+  --requires="libc6 \(\>= 2.14\),libgcrypt20 \(\>= 1.6.1\),libqtcore4 \(\>= 4:4.8.0\),libqtgui4 \(\>= 4:4.8.0\),libstdc++6 \(\>= 4.1.1\),libx11-6,libxi6,libxtst6,zlib1g \(\>= 1:1.1.4\)" \
+  --nodoc \
+  --pkgname=keepassx \
+  --pkgversion=${version} \
+  make -i install
+
+VOLUME /package
+RUN useradd --uid ${uid} -mU keepassxbuild
+RUN chown keepassxbuild /package
+
+USER keepassxbuild
+CMD cp ${BUILD_DIR}/build/keepassx_*-1_amd64.deb /package/
